@@ -407,6 +407,8 @@ module.exports = function<T, P, I, TI, C, CX>(
       // priority reconciliation first before we can get down here. However,
       // that is a bit tricky since workInProgress and current can have
       // different "hidden" settings.
+      // TODO: there is a test in ReactDOMFiber-test that uses `hidden` attribute.
+      // If we change the API for deprioritization we must change that test too.
       let child = workInProgress.progressedChild;
       while (child) {
         // To ensure that this subtree gets its priority reset, the children
@@ -440,28 +442,16 @@ module.exports = function<T, P, I, TI, C, CX>(
     cloneChildFibers(current, workInProgress);
     markChildAsProgressed(current, workInProgress, priorityLevel);
 
-    // Put context on the stack because we will work on children
-    if (isHostComponent) {
-      pushHostContext(workInProgress);
-    } else {
-      switch (workInProgress.tag) {
-        case ClassComponent:
-          if (isContextProvider(workInProgress)) {
-            pushContextProvider(workInProgress, false);
-          }
-          break;
-        case HostRoot:
-        case HostPortal:
-          pushHostContainer(workInProgress.stateNode.containerInfo);
-          break;
-      }
-    }
-    // TODO: this is annoyingly duplicating non-jump codepaths.
-
     return workInProgress.child;
   }
 
   function bailoutOnLowPriority(current, workInProgress) {
+    // TODO: What if this is currently in progress?
+    // How can that happen? How is this not being cloned?
+    return null;
+  }
+
+  function pushContextIfNecessary(workInProgress : Fiber) {
     switch (workInProgress.tag) {
       case ClassComponent:
         if (isContextProvider(workInProgress)) {
@@ -471,10 +461,22 @@ module.exports = function<T, P, I, TI, C, CX>(
       case HostPortal:
         pushHostContainer(workInProgress.stateNode.containerInfo);
         break;
+      case HostRoot:
+        pushHostContainer(workInProgress.stateNode.containerInfo);
+        const root = (workInProgress.stateNode : FiberRoot);
+        if (root.pendingContext) {
+          pushTopLevelContextObject(
+            root.pendingContext,
+            root.pendingContext !== root.context
+          );
+        } else {
+          pushTopLevelContextObject(root.context, false);
+        }
+        break;
+      case HostComponent:
+        pushHostContext(workInProgress);
+        break;
     }
-    // TODO: What if this is currently in progress?
-    // How can that happen? How is this not being cloned?
-    return null;
   }
 
   function beginWork(current : ?Fiber, workInProgress : Fiber, priorityLevel : PriorityLevel) : ?Fiber {
@@ -483,6 +485,8 @@ module.exports = function<T, P, I, TI, C, CX>(
       resetContext();
       resetHostContainer();
     }
+    // Push context before any bailouts.
+    pushContextIfNecessary(workInProgress);
 
     if (workInProgress.pendingWorkPriority === NoWork ||
         workInProgress.pendingWorkPriority > priorityLevel) {
@@ -530,23 +534,10 @@ module.exports = function<T, P, I, TI, C, CX>(
       case ClassComponent:
         return updateClassComponent(current, workInProgress, priorityLevel);
       case HostRoot: {
-        const root = (workInProgress.stateNode : FiberRoot);
-        if (root.pendingContext) {
-          pushTopLevelContextObject(
-            root.pendingContext,
-            root.pendingContext !== root.context
-          );
-        } else {
-          pushTopLevelContextObject(root.context, false);
-        }
-
         if (updateQueue) {
           beginUpdateQueue(workInProgress, updateQueue, null, null, null, priorityLevel);
         }
-
-        pushHostContainer(workInProgress.stateNode.containerInfo);
         reconcileChildren(current, workInProgress, pendingProps);
-
         // A yield component is just a placeholder, we can just run through the
         // next one immediately.
         return workInProgress.child;
@@ -571,7 +562,6 @@ module.exports = function<T, P, I, TI, C, CX>(
         // next one immediately.
         return null;
       case HostPortal:
-        pushHostContainer(workInProgress.stateNode.containerInfo);
         updatePortalComponent(current, workInProgress);
         return workInProgress.child;
       case Fragment:

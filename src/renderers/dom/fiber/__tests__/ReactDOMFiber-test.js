@@ -650,6 +650,19 @@ describe('ReactDOMFiber', () => {
       );
     });
 
+    it('keeps track of namespaces despite low priority bailout', () => {
+      assertNamespacesMatch(
+        <svg {...expectSVG}>
+          {/*
+            TODO: this relies on the magic `hidden` attribute in Fiber.
+            Figure out a better test.
+          */}
+          <foreignObject hidden={true} {...expectSVG} />
+          <image {...expectSVG} />
+        </svg>
+      );
+    });
+
     it('should unwind namespaces on uncaught errors', () => {
       function BrokenRender() {
         throw new Error('Hello');
