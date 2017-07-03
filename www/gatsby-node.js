@@ -51,9 +51,9 @@ exports.onCreateNode = ({ node, boundActionCreators, getNode }) => {
   const { createNodeField } = boundActionCreators
 
   switch (node.internal.type) {
-    case 'MarkdownRemark':
+    case "MarkdownRemark":
       const { relativePath } = getNode(node.parent)
-      const slug = `/${relativePath.replace('.md', '.html')}` // TODO
+      const slug = `/${relativePath.replace(".md", ".html")}` // TODO
 
       // Website link
       createNodeField({
@@ -65,8 +65,8 @@ exports.onCreateNode = ({ node, boundActionCreators, getNode }) => {
       // GitHub edit link
       createNodeField({
         node,
-        fieldName: 'path',
-        fieldValue: relativePath,
+        name: "path",
+        value: relativePath,
       })
       return
   }
