@@ -1,27 +1,27 @@
-import React from 'react';
-import Helmet from 'react-helmet';
-import Typekit from 'react-typekit';
+import React from "react"
+import Helmet from "react-helmet"
+import Typekit from "react-typekit"
 
-let stylesStr;
+let stylesStr
 if (process.env.NODE_ENV === `production`) {
   try {
-    stylesStr = require(`!raw-loader!../public/styles.css`);
+    stylesStr = require(`!raw-loader!../public/styles.css`)
   } catch (e) {
-    console.log(e);
+    console.log(e)
   }
 }
 
-module.exports = React.createClass({
+export default class HTML extends React.Component {
   render() {
-    const head = Helmet.rewind();
-    let css;
+    const head = Helmet.rewind()
+    let css
     if (process.env.NODE_ENV === `production`) {
       css = (
         <style
           id="gatsby-inlined-css"
-          dangerouslySetInnerHTML={{__html: stylesStr}}
+          dangerouslySetInnerHTML={{ __html: stylesStr }}
         />
-      );
+      )
     }
 
     return (
@@ -43,11 +43,11 @@ module.exports = React.createClass({
         <body>
           <div
             id="___gatsby"
-            dangerouslySetInnerHTML={{__html: this.props.body}}
+            dangerouslySetInnerHTML={{ __html: this.props.body }}
           />
           {this.props.postBodyComponents}
         </body>
       </html>
-    );
-  },
-});
+    )
+  }
+}
