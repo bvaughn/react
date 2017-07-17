@@ -34,6 +34,25 @@
   padding-left: 40px;
 }
 
+.Aux {
+  flex: 0 0 calc(1 / 6 * 100%);
+
+
+  @include breakpoint("medium-to-xlarge") {
+    margin-top: 35px;
+  }
+
+  @include breakpoint("xxlarge") {
+    margin-top: 45px;
+  }
+}
+
+.AuxInner {
+  padding-left: 40px;
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
 .AuthorAndDate {
   margin-top: 15px;
 }

@@ -4,6 +4,8 @@
   -webkit-font-smoothing: antialiased;
   padding-top: 50px;
   padding-bottom: 50px;
+  position: relative;
+  z-index: 1;
 
   @include breakpoint("xlarge+") {
     padding-top: 80px;

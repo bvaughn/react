@@ -1,10 +1,11 @@
 import cn from 'classnames';
 import MarkdownHeader from '../MarkdownHeader';
 import NavigationFooter from '../NavigationFooter';
+import Sidebar from '../Sidebar';
+import FixedSidebar from '../FixedSidebar';
 import React from 'react';
-import {StickyContainer} from 'react-sticky';
+import Measure from 'react-measure';
 import PropTypes from 'prop-types';
-import StickySidebar from '../StickySidebar';
 import dateToString from '../../utils/dateToString';
 import findSectionForPath from '../../utils/findSectionForPath';
 import toCommaSeparatedList from '../../utils/toCommaSeparatedList';
@@ -24,7 +25,7 @@ const MarkdownPage = ({
   return (
     <div className={styles.MarkdownPage}>
       <div className={styles.Wrapper}>
-        <StickyContainer className={styles.Sticky}>
+        <div className={styles.Sticky}>
           <article className={styles.Main}>
             <div className={styles.Inner}>
               <MarkdownHeader
@@ -55,17 +56,19 @@ const MarkdownPage = ({
             />
           </article>
 
-          <div className={styles.Wrapper}>
-            <StickySidebar
-              defaultActiveSection={findSectionForPath(
-                location.pathname,
-                sectionList,
-              )}
-              location={location}
-              sectionList={sectionList}
-            />
+          <div className={styles.Aux}>
+            <FixedSidebar className={styles.AuxInner}>
+              <Sidebar
+                defaultActiveSection={findSectionForPath(
+                  location.pathname,
+                  sectionList,
+                )}
+                location={location}
+                sectionList={sectionList}
+              />
+            </FixedSidebar>
           </div>
-        </StickyContainer>
+        </div>
 
         {/* TODO Read prev/next from index map, not this way */}
         <NavigationFooter
@@ -87,7 +90,7 @@ MarkdownPage.propTypes = {
   date: PropTypes.object,
   location: PropTypes.object.isRequired,
   markdownRemark: PropTypes.object.isRequired,
-  sectionList: PropTypes.array.isRequired,
+  sectionList: PropTypes.array.isRequired
 };
 
 export default MarkdownPage;
