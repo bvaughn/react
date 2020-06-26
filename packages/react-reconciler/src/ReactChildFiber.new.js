@@ -15,7 +15,7 @@ import type {Fiber} from './ReactInternalTypes';
 import type {Lanes} from './ReactFiberLane';
 
 import getComponentName from 'shared/getComponentName';
-import {Placement, Deletion} from './ReactSideEffectTags';
+import {Placement, Deletion, NoEffect} from './ReactSideEffectTags';
 import {
   getIteratorFn,
   REACT_ELEMENT_TYPE,
@@ -288,7 +288,12 @@ function ChildReconciler(shouldTrackSideEffects) {
       returnFiber.firstEffect = returnFiber.lastEffect = childToDelete;
     }
     childToDelete.nextEffect = null;
-    childToDelete.effectTag = Deletion;
+
+    if ((childToDelete.effectTag & Deletion) === NoEffect) {
+      childToDelete.effectTag = Deletion;
+
+      returnFiber.deletions.push(childToDelete);
+    }
   }
 
   function deleteRemainingChildren(

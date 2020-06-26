@@ -29,7 +29,7 @@ import {
   enableScopeAPI,
   enableBlocksAPI,
 } from 'shared/ReactFeatureFlags';
-import {NoEffect, Placement} from './ReactSideEffectTags';
+import {NoEffect, Deletion, Placement} from './ReactSideEffectTags';
 import {ConcurrentRoot, BlockingRoot} from './ReactRootTags';
 import {
   IndeterminateComponent,
@@ -143,7 +143,9 @@ function FiberNode(
   this.mode = mode;
 
   // Effects
-  this.effectTag = NoEffect;
+  this._effectTag = NoEffect;
+  this.subtreeTag = NoEffect;
+  this.deletions = [];
   this.nextEffect = null;
 
   this.firstEffect = null;
@@ -191,6 +193,25 @@ function FiberNode(
     if (!hasBadMapPolyfill && typeof Object.preventExtensions === 'function') {
       Object.preventExtensions(this);
     }
+  }
+}
+FiberNode.prototype = {
+  get effectTag() {
+    return this._effectTag;
+  },
+  set effectTag(value) {
+    /*
+    if (this._effectTag !== value) {
+      console.log(
+        "effectTag:",
+        require('shared/getComponentName').default(this.type),
+        this._effectTag.toString(2).padStart(31, '0'), '->',
+        value.toString(2).padStart(31, '0'), '\n',
+        new Error().stack.split('\n').slice(2,6).join('\n')
+      );
+    }
+    */
+    this._effectTag = value;
   }
 }
 
@@ -287,6 +308,8 @@ export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
     // We already have an alternate.
     // Reset the effect tag.
     workInProgress.effectTag = NoEffect;
+    workInProgress.subtreeTag = NoEffect;
+    workInProgress.deletions = [];
 
     // The effect list is no longer valid.
     workInProgress.nextEffect = null;
@@ -826,6 +849,8 @@ export function assignFiberPropertiesInDEV(
   target.dependencies = source.dependencies;
   target.mode = source.mode;
   target.effectTag = source.effectTag;
+  target.subtreeTag = source.NoEffect;
+  target.deletions = source.deletions;
   target.nextEffect = source.nextEffect;
   target.firstEffect = source.firstEffect;
   target.lastEffect = source.lastEffect;

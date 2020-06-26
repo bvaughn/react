@@ -2143,7 +2143,7 @@ function commitMutationEffects(
     commitMutationEffects(fiber.child, root, renderPriorityLevel);
   }
 
-  // use invokeGguardedCallback
+  // TODO use invokeGguardedCallback
   try {
     setCurrentDebugFiberInDEV(fiber);
 
@@ -2151,8 +2151,7 @@ function commitMutationEffects(
 
     resetCurrentDebugFiberInDEV();
   } catch (error) {
-    invariant(nextEffect !== null, 'Should be working on an effect.');
-    captureCommitPhaseError(nextEffect, error);
+    captureCommitPhaseError(fiber, error);
   }
 
   commitMutationEffects(fiber.sibling, root, renderPriorityLevel);
@@ -2176,12 +2175,19 @@ function commitMutationEffectsImpl(
     }
   }
 
+  // TODO Is this the right place/timing to delete children?
+  const deletions = fiber.deletions;
+  for (let i = 0; i < deletions.length; i++) {
+    const childToDelete = deletions[i];
+    commitDeletion(root, childToDelete, renderPriorityLevel);
+  }
+  fiber.deletions.splice(0);
+
   // The following switch statement is only concerned about placement,
   // updates, and deletions. To avoid needing to add a case for every possible
   // bitmap value, we remove the secondary effects from the effect tag and
   // switch on that value.
-  const primaryEffectTag =
-    effectTag & (Placement | Update | Deletion | Hydrating);
+  const primaryEffectTag = effectTag & (Placement | Update | Hydrating);
   switch (primaryEffectTag) {
     case Placement: {
       commitPlacement(fiber);
@@ -2219,13 +2225,6 @@ function commitMutationEffectsImpl(
     case Update: {
       const current = fiber.alternate;
       commitWork(current, fiber);
-      break;
-    }
-
-    // This part doesn't actually work because deletions aren't in the subtree.
-    // Question: do deletions need to be processed in order?
-    case Deletion: {
-      commitDeletion(root, fiber, renderPriorityLevel);
       break;
     }
   }

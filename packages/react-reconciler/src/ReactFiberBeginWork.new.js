@@ -2058,6 +2058,8 @@ function updateSuspensePrimaryChildren(
     currentFallbackChildFragment.nextEffect = null;
     currentFallbackChildFragment.effectTag = Deletion;
     workInProgress.firstEffect = workInProgress.lastEffect = currentFallbackChildFragment;
+
+    workInProgress.deletions.push(currentFallbackChildFragment);
   }
 
   workInProgress.child = primaryChildFragment;

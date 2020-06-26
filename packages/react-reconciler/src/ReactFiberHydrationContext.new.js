@@ -126,6 +126,8 @@ function deleteHydratableInstance(
   childToDelete.return = returnFiber;
   childToDelete.effectTag = Deletion;
 
+  returnFiber.deletions.push(childToDelete);
+
   // This might seem like it belongs on progressedFirstDeletion. However,
   // these children are not part of the reconciliation list of children.
   // Even if we abort and rereconcile the children, that will try to hydrate
