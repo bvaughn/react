@@ -106,6 +106,8 @@ import {
   HostEffectMask,
   Hydrating,
   HydratingAndUpdate,
+  LifecycleEffectMask,
+  SubtreeHasEffect,
 } from './ReactSideEffectTags';
 import {
   NoLanePriority,
@@ -1576,7 +1578,6 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
     // need an additional field on the work in progress.
     const current = completedWork.alternate;
     const returnFiber = completedWork.return;
-
     // Check if the work completed or if something threw.
     if ((completedWork.effectTag & Incomplete) === NoEffect) {
       setCurrentDebugFiberInDEV(completedWork);
@@ -1679,6 +1680,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
         // Mark the parent fiber as incomplete and clear its effect list.
         returnFiber.firstEffect = returnFiber.lastEffect = null;
         returnFiber.effectTag |= Incomplete;
+        returnFiber.effectTag &= ~SubtreeHasEffect;
       }
     }
 
@@ -1716,6 +1718,19 @@ function resetChildLanes(completedWork: Fiber) {
   }
 
   let newChildLanes = NoLanes;
+  let subtreeHasEffects = false;
+
+  let childrenDidNotComplete = false;
+  // When a fiber is cloned, its actualDuration is reset to 0. This value will
+  // only be updated if work is done on the fiber (i.e. it doesn't bailout).
+  // When work is done, it should bubble to the parent's actualDuration. If
+  // the fiber has not been cloned though, (meaning no work was done), then
+  // this value wixll reflect the amount of time spent working on a previous
+  // render. In that case it should not bubble. We determine whether it was
+  // cloned by comparing the child pointer.
+  const shouldBubble =
+    completedWork.alternate === null ||
+    completedWork.child !== completedWork.alternate.child;
 
   // Bubble up the earliest expiration time.
   if (enableProfilerTimer && (completedWork.mode & ProfileMode) !== NoMode) {
@@ -1724,24 +1739,23 @@ function resetChildLanes(completedWork: Fiber) {
     let actualDuration = completedWork.actualDuration;
     let treeBaseDuration = ((completedWork.selfBaseDuration: any): number);
 
-    // When a fiber is cloned, its actualDuration is reset to 0. This value will
-    // only be updated if work is done on the fiber (i.e. it doesn't bailout).
-    // When work is done, it should bubble to the parent's actualDuration. If
-    // the fiber has not been cloned though, (meaning no work was done), then
-    // this value will reflect the amount of time spent working on a previous
-    // render. In that case it should not bubble. We determine whether it was
-    // cloned by comparing the child pointer.
-    const shouldBubbleActualDurations =
-      completedWork.alternate === null ||
-      completedWork.child !== completedWork.alternate.child;
-
     let child = completedWork.child;
     while (child !== null) {
       newChildLanes = mergeLanes(
         newChildLanes,
         mergeLanes(child.lanes, child.childLanes),
       );
-      if (shouldBubbleActualDurations) {
+
+      subtreeHasEffects =
+        subtreeHasEffects ||
+        (child.effectTag & (LifecycleEffectMask | Placement)) !== NoEffect ||
+        (child.effectTag & SubtreeHasEffect) !== NoEffect;
+
+      if ((child.effectTag & Incomplete) !== NoEffect) {
+        childrenDidNotComplete = true;
+      }
+
+      if (shouldBubble) {
         actualDuration += child.actualDuration;
       }
       treeBaseDuration += child.treeBaseDuration;
@@ -1768,11 +1782,24 @@ function resetChildLanes(completedWork: Fiber) {
         newChildLanes,
         mergeLanes(child.lanes, child.childLanes),
       );
+
+      subtreeHasEffects =
+        subtreeHasEffects ||
+        (child.effectTag & (LifecycleEffectMask | Placement)) !== NoEffect ||
+        (child.effectTag & SubtreeHasEffect) !== NoEffect;
+
+      if ((child.effectTag & Incomplete) !== NoEffect) {
+        childrenDidNotComplete = true;
+      }
+
       child = child.sibling;
     }
   }
 
   completedWork.childLanes = newChildLanes;
+  if (subtreeHasEffects && !childrenDidNotComplete && shouldBubble) {
+    completedWork.effectTag |= SubtreeHasEffect;
+  }
 }
 
 function commitRoot(root) {
@@ -1915,32 +1942,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     }
 
     // The next phase is the mutation phase, where we mutate the host tree.
-    nextEffect = firstEffect;
-    do {
-      if (__DEV__) {
-        invokeGuardedCallback(
-          null,
-          commitMutationEffects,
-          null,
-          root,
-          renderPriorityLevel,
-        );
-        if (hasCaughtError()) {
-          invariant(nextEffect !== null, 'Should be working on an effect.');
-          const error = clearCaughtError();
-          captureCommitPhaseError(nextEffect, error);
-          nextEffect = nextEffect.nextEffect;
-        }
-      } else {
-        try {
-          commitMutationEffects(root, renderPriorityLevel);
-        } catch (error) {
-          invariant(nextEffect !== null, 'Should be working on an effect.');
-          captureCommitPhaseError(nextEffect, error);
-          nextEffect = nextEffect.nextEffect;
-        }
-      }
-    } while (nextEffect !== null);
+    commitMutationEffects(finishedWork, root, renderPriorityLevel);
 
     if (shouldFireAfterActiveInstanceBlur) {
       afterActiveInstanceBlur();
@@ -1956,26 +1958,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // The next phase is the layout phase, where we call effects that read
     // the host tree after it's been mutated. The idiomatic use case for this is
     // layout, but class component lifecycles also fire here for legacy reasons.
-    nextEffect = firstEffect;
-    do {
-      if (__DEV__) {
-        invokeGuardedCallback(null, commitLayoutEffects, null, root, lanes);
-        if (hasCaughtError()) {
-          invariant(nextEffect !== null, 'Should be working on an effect.');
-          const error = clearCaughtError();
-          captureCommitPhaseError(nextEffect, error);
-          nextEffect = nextEffect.nextEffect;
-        }
-      } else {
-        try {
-          commitLayoutEffects(root, lanes);
-        } catch (error) {
-          invariant(nextEffect !== null, 'Should be working on an effect.');
-          captureCommitPhaseError(nextEffect, error);
-          nextEffect = nextEffect.nextEffect;
-        }
-      }
-    } while (nextEffect !== null);
+    commitLayoutEffects(root, lanes);
 
     nextEffect = null;
 
@@ -2147,98 +2130,145 @@ function commitBeforeMutationEffects() {
   }
 }
 
-function commitMutationEffects(root: FiberRoot, renderPriorityLevel) {
-  // TODO: Should probably move the bulk of this function to commitWork.
-  while (nextEffect !== null) {
-    setCurrentDebugFiberInDEV(nextEffect);
+function commitMutationEffects(
+  fiber: Fiber,
+  root: FiberRoot,
+  renderPriorityLevel,
+) {
+  if (fiber === null) {
+    return;
+  }
 
-    const effectTag = nextEffect.effectTag;
+  if (fiber.child && (fiber.effectTag & SubtreeHasEffect) !== NoEffect) {
+    commitMutationEffects(fiber.child, root, renderPriorityLevel);
+  }
 
-    if (effectTag & ContentReset) {
-      commitResetTextContent(nextEffect);
-    }
+  // use invokeGguardedCallback
+  try {
+    setCurrentDebugFiberInDEV(fiber);
 
-    if (effectTag & Ref) {
-      const current = nextEffect.alternate;
-      if (current !== null) {
-        commitDetachRef(current);
-      }
-    }
-
-    // The following switch statement is only concerned about placement,
-    // updates, and deletions. To avoid needing to add a case for every possible
-    // bitmap value, we remove the secondary effects from the effect tag and
-    // switch on that value.
-    const primaryEffectTag =
-      effectTag & (Placement | Update | Deletion | Hydrating);
-    switch (primaryEffectTag) {
-      case Placement: {
-        commitPlacement(nextEffect);
-        // Clear the "placement" from effect tag so that we know that this is
-        // inserted, before any life-cycles like componentDidMount gets called.
-        // TODO: findDOMNode doesn't rely on this any more but isMounted does
-        // and isMounted is deprecated anyway so we should be able to kill this.
-        nextEffect.effectTag &= ~Placement;
-        break;
-      }
-      case PlacementAndUpdate: {
-        // Placement
-        commitPlacement(nextEffect);
-        // Clear the "placement" from effect tag so that we know that this is
-        // inserted, before any life-cycles like componentDidMount gets called.
-        nextEffect.effectTag &= ~Placement;
-
-        // Update
-        const current = nextEffect.alternate;
-        commitWork(current, nextEffect);
-        break;
-      }
-      case Hydrating: {
-        nextEffect.effectTag &= ~Hydrating;
-        break;
-      }
-      case HydratingAndUpdate: {
-        nextEffect.effectTag &= ~Hydrating;
-
-        // Update
-        const current = nextEffect.alternate;
-        commitWork(current, nextEffect);
-        break;
-      }
-      case Update: {
-        const current = nextEffect.alternate;
-        commitWork(current, nextEffect);
-        break;
-      }
-      case Deletion: {
-        commitDeletion(root, nextEffect, renderPriorityLevel);
-        break;
-      }
-    }
+    commitMutationEffectsImpl(fiber, root, renderPriorityLevel);
 
     resetCurrentDebugFiberInDEV();
-    nextEffect = nextEffect.nextEffect;
+  } catch (error) {
+    invariant(nextEffect !== null, 'Should be working on an effect.');
+    captureCommitPhaseError(nextEffect, error);
+  }
+
+  commitMutationEffects(fiber.sibling, root, renderPriorityLevel);
+}
+
+function commitMutationEffectsImpl(
+  fiber: Fiber,
+  root: FiberRoot,
+  renderPriorityLevel,
+) {
+  const effectTag = fiber.effectTag;
+
+  if (effectTag & ContentReset) {
+    commitResetTextContent(fiber);
+  }
+
+  if (effectTag & Ref) {
+    const current = fiber.alternate;
+    if (current !== null) {
+      commitDetachRef(current);
+    }
+  }
+
+  // The following switch statement is only concerned about placement,
+  // updates, and deletions. To avoid needing to add a case for every possible
+  // bitmap value, we remove the secondary effects from the effect tag and
+  // switch on that value.
+  const primaryEffectTag =
+    effectTag & (Placement | Update | Deletion | Hydrating);
+  switch (primaryEffectTag) {
+    case Placement: {
+      commitPlacement(fiber);
+      // Clear the "placement" from effect tag so that we know that this is
+      // inserted, before any life-cycles like componentDidMount gets called.
+      // TODO: findDOMNode doesn't rely on this any more but isMounted does
+      // and isMounted is deprecated anyway so we should be able to kill this.
+      fiber.effectTag &= ~Placement;
+      break;
+    }
+    case PlacementAndUpdate: {
+      // Placement
+      commitPlacement(fiber);
+      // Clear the "placement" from effect tag so that we know that this is
+      // inserted, before any life-cycles like componentDidMount gets called.
+      fiber.effectTag &= ~Placement;
+
+      // Update
+      const current = fiber.alternate;
+      commitWork(current, fiber);
+      break;
+    }
+    case Hydrating: {
+      fiber.effectTag &= ~Hydrating;
+      break;
+    }
+    case HydratingAndUpdate: {
+      fiber.effectTag &= ~Hydrating;
+
+      // Update
+      const current = fiber.alternate;
+      commitWork(current, fiber);
+      break;
+    }
+    case Update: {
+      const current = fiber.alternate;
+      commitWork(current, fiber);
+      break;
+    }
+
+    // This part doesn't actually work because deletions aren't in the subtree.
+    // Question: do deletions need to be processed in order?
+    case Deletion: {
+      commitDeletion(root, fiber, renderPriorityLevel);
+      break;
+    }
   }
 }
 
 function commitLayoutEffects(root: FiberRoot, committedLanes: Lanes) {
-  // TODO: Should probably move the bulk of this function to commitWork.
-  while (nextEffect !== null) {
-    setCurrentDebugFiberInDEV(nextEffect);
+  commitLayoutEffectsImpl(root.current, root, committedLanes);
+}
 
-    const effectTag = nextEffect.effectTag;
+function commitLayoutEffectsImpl(
+  fiber: Fiber,
+  root: FiberRoot,
+  committedLanes: Lanes,
+) {
+  if (fiber === null) {
+    return;
+  }
+
+  if (fiber.child !== null && (fiber.effectTag & SubtreeHasEffect) !== NoEffect) {
+    commitLayoutEffectsImpl(fiber.child, root, committedLanes);
+  }
+
+  // use invokeGuardedCallback
+  try {
+    setCurrentDebugFiberInDEV(fiber);
+    const effectTag = fiber.effectTag;
 
     if (effectTag & (Update | Callback)) {
-      const current = nextEffect.alternate;
-      commitLayoutEffectOnFiber(root, current, nextEffect, committedLanes);
+      const current = fiber.alternate;
+      commitLayoutEffectOnFiber(root, current, fiber, committedLanes);
     }
 
     if (effectTag & Ref) {
-      commitAttachRef(nextEffect);
+      commitAttachRef(fiber);
     }
 
     resetCurrentDebugFiberInDEV();
-    nextEffect = nextEffect.nextEffect;
+  } catch (error) {
+    captureCommitPhaseError(fiber, error);
+  }
+
+  if (fiber.sibling !== null) {
+    commitLayoutEffectsImpl(fiber.sibling, root, committedLanes);
   }
 }
 
