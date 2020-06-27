@@ -1748,8 +1748,11 @@ function resetChildLanes(completedWork: Fiber) {
 
       subtreeHasEffects =
         subtreeHasEffects ||
-        (child.effectTag & (LifecycleEffectMask | Placement)) !== NoEffect ||
-        (child.effectTag & SubtreeHasEffect) !== NoEffect;
+        (child.effectTag &
+          (LifecycleEffectMask | Placement | ContentReset | Hydrating)) !==
+          NoEffect ||
+        (child.effectTag & SubtreeHasEffect) !== NoEffect ||
+        child.deletions.length > 0;
 
       if ((child.effectTag & Incomplete) !== NoEffect) {
         childrenDidNotComplete = true;
@@ -1785,8 +1788,11 @@ function resetChildLanes(completedWork: Fiber) {
 
       subtreeHasEffects =
         subtreeHasEffects ||
-        (child.effectTag & (LifecycleEffectMask | Placement)) !== NoEffect ||
-        (child.effectTag & SubtreeHasEffect) !== NoEffect;
+        (child.effectTag &
+          (LifecycleEffectMask | Placement | ContentReset | Hydrating)) !==
+          NoEffect ||
+        (child.effectTag & SubtreeHasEffect) !== NoEffect ||
+        child.deletions.length > 0;
 
       if ((child.effectTag & Incomplete) !== NoEffect) {
         childrenDidNotComplete = true;
@@ -2138,20 +2144,24 @@ function commitMutationEffects(
   if (fiber === null) {
     return;
   }
-
   if (fiber.child && (fiber.effectTag & SubtreeHasEffect) !== NoEffect) {
     commitMutationEffects(fiber.child, root, renderPriorityLevel);
   }
 
   // TODO use invokeGguardedCallback
-  try {
-    setCurrentDebugFiberInDEV(fiber);
+  if (
+    (fiber.effectTag !== NoEffect && fiber.effectTag !== SubtreeHasEffect) ||
+    fiber.deletions.length > 0
+  ) {
+    try {
+      setCurrentDebugFiberInDEV(fiber);
 
-    commitMutationEffectsImpl(fiber, root, renderPriorityLevel);
+      commitMutationEffectsImpl(fiber, root, renderPriorityLevel);
 
-    resetCurrentDebugFiberInDEV();
-  } catch (error) {
-    captureCommitPhaseError(fiber, error);
+      resetCurrentDebugFiberInDEV();
+    } catch (error) {
+      captureCommitPhaseError(fiber, error);
+    }
   }
 
   commitMutationEffects(fiber.sibling, root, renderPriorityLevel);
@@ -2163,7 +2173,6 @@ function commitMutationEffectsImpl(
   renderPriorityLevel,
 ) {
   const effectTag = fiber.effectTag;
-
   if (effectTag & ContentReset) {
     commitResetTextContent(fiber);
   }
@@ -2243,7 +2252,10 @@ function commitLayoutEffectsImpl(
     return;
   }
 
-  if (fiber.child !== null && (fiber.effectTag & SubtreeHasEffect) !== NoEffect) {
+  if (
+    fiber.child !== null &&
+    (fiber.effectTag & SubtreeHasEffect) !== NoEffect
+  ) {
     commitLayoutEffectsImpl(fiber.child, root, committedLanes);
   }
 
