@@ -77,16 +77,12 @@ describe('updaters', () => {
     await ReactTestUtils.act(async () => {
       ReactDOM.render(<Parent />, container);
     });
-    expect(allSchedulerTags).toHaveLength(1);
-    expect(allSchedulerTags[0]).toHaveLength(1);
-    expect(allSchedulerTags[0]).toContain(HostRoot);
+    expect(allSchedulerTags).toEqual([[HostRoot]]);
 
     await ReactTestUtils.act(async () => {
       ReactDOM.render(<Parent />, container);
     });
-    expect(allSchedulerTags).toHaveLength(2);
-    expect(allSchedulerTags[1]).toHaveLength(1);
-    expect(allSchedulerTags[1]).toContain(HostRoot);
+    expect(allSchedulerTags).toEqual([[HostRoot], [HostRoot]]);
   });
 
   it('should report a function component as the scheduler for a hooks update', async () => {
@@ -116,21 +112,21 @@ describe('updaters', () => {
     });
     expect(scheduleForA).not.toBeNull();
     expect(scheduleForB).not.toBeNull();
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     await ReactTestUtils.act(async () => {
       scheduleForA();
     });
-    expect(allSchedulerTypes).toHaveLength(2);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(SchedulingComponentA);
+    expect(allSchedulerTypes).toEqual([[null], [SchedulingComponentA]]);
 
     await ReactTestUtils.act(async () => {
       scheduleForB();
     });
-    expect(allSchedulerTypes).toHaveLength(3);
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(SchedulingComponentB);
+    expect(allSchedulerTypes).toEqual([
+      [null],
+      [SchedulingComponentA],
+      [SchedulingComponentB],
+    ]);
   });
 
   it('should report a class component as the scheduler for a setState update', async () => {
@@ -147,15 +143,13 @@ describe('updaters', () => {
     await ReactTestUtils.act(async () => {
       ReactDOM.render(<Parent />, document.createElement('div'));
     });
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     expect(instance).not.toBeNull();
     await ReactTestUtils.act(async () => {
       instance.setState({});
     });
-    expect(allSchedulerTypes).toHaveLength(2);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(SchedulingComponent);
+    expect(allSchedulerTypes).toEqual([[null], [SchedulingComponent]]);
   });
 
   // @gate experimental
@@ -198,7 +192,7 @@ describe('updaters', () => {
     });
     expect(triggerActiveCascade).not.toBeNull();
     expect(triggerPassiveCascade).not.toBeNull();
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     await ReactTestUtils.act(async () => {
       triggerActiveCascade();
@@ -209,11 +203,11 @@ describe('updaters', () => {
         'onCommitRoot',
       ]);
     });
-    expect(allSchedulerTypes).toHaveLength(3);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(SchedulingComponent);
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(CascadingChild);
+    expect(allSchedulerTypes).toEqual([
+      [null],
+      [SchedulingComponent],
+      [CascadingChild],
+    ]);
 
     await ReactTestUtils.act(async () => {
       triggerPassiveCascade();
@@ -224,11 +218,13 @@ describe('updaters', () => {
         'onCommitRoot',
       ]);
     });
-    expect(allSchedulerTypes).toHaveLength(5);
-    expect(allSchedulerTypes[3]).toHaveLength(1);
-    expect(allSchedulerTypes[3]).toContain(SchedulingComponent);
-    expect(allSchedulerTypes[4]).toHaveLength(1);
-    expect(allSchedulerTypes[4]).toContain(CascadingChild);
+    expect(allSchedulerTypes).toEqual([
+      [null],
+      [SchedulingComponent],
+      [CascadingChild],
+      [SchedulingComponent],
+      [CascadingChild],
+    ]);
 
     // Verify no outstanding flushes
     Scheduler.unstable_flushAll();
@@ -273,15 +269,13 @@ describe('updaters', () => {
       expect(Scheduler).toHaveYielded(['onCommitRoot']);
     });
     expect(setShouldSuspend).not.toBeNull();
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     await ReactTestUtils.act(async () => {
       setShouldSuspend(true);
     });
     expect(Scheduler).toHaveYielded(['onCommitRoot']);
-    expect(allSchedulerTypes).toHaveLength(2);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(Suspender);
+    expect(allSchedulerTypes).toEqual([[null], [Suspender]]);
 
     expect(resolver).not.toBeNull();
     await ReactTestUtils.act(() => {
@@ -289,9 +283,7 @@ describe('updaters', () => {
       return promise;
     });
     expect(Scheduler).toHaveYielded(['onCommitRoot']);
-    expect(allSchedulerTypes).toHaveLength(3);
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(Suspender);
+    expect(allSchedulerTypes).toEqual([[null], [Suspender], [Suspender]]);
 
     // Verify no outstanding flushes
     Scheduler.unstable_flushAll();
@@ -301,7 +293,10 @@ describe('updaters', () => {
 
   // @gate experimental
   it('traces interaction through hidden subtree', async () => {
-    const {HostRoot} = require('react-reconciler/src/ReactWorkTags');
+    const {
+      FunctionComponent,
+      HostRoot,
+    } = require('react-reconciler/src/ReactWorkTags');
 
     // Note: This is based on a similar component we use in www. We can delete once
     // the extra div wrapper is no longer necessary.
@@ -368,17 +363,17 @@ describe('updaters', () => {
       'onCommitRoot',
       'Child:update',
     ]);
-    // Initial render
-    expect(allSchedulerTypes).toHaveLength(4);
-    expect(allSchedulerTags[0]).toHaveLength(1);
-    expect(allSchedulerTags[0]).toContain(HostRoot);
-    // Offscreen update
-    expect(allSchedulerTypes[1]).toHaveLength(0);
-    // Child passive effect
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(Child);
-    // Offscreen update
-    expect(allSchedulerTypes[3]).toHaveLength(0);
+    expect(allSchedulerTypes).toEqual([
+      // Initial render
+      [null],
+      // Offscreen update
+      [],
+      // Child passive effect
+      [Child],
+      // Offscreen update
+      [],
+    ]);
+    expect(allSchedulerTags).toEqual([[HostRoot], [], [FunctionComponent], []]);
   });
 
   // @gate experimental
@@ -432,11 +427,7 @@ describe('updaters', () => {
       triggerError();
     });
     expect(Scheduler).toHaveYielded(['onCommitRoot', 'error', 'onCommitRoot']);
-    expect(allSchedulerTypes).toHaveLength(2);
-    expect(allSchedulerTypes[0]).toHaveLength(1);
-    expect(allSchedulerTypes[0]).toContain(Parent);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(ErrorBoundary);
+    expect(allSchedulerTypes).toEqual([[Parent], [ErrorBoundary]]);
 
     // Verify no outstanding flushes
     Scheduler.unstable_flushAll();
@@ -482,13 +473,13 @@ describe('updaters', () => {
     });
     expect(triggerLowPriorityUpdate).not.toBeNull();
     expect(triggerSyncPriorityUpdate).not.toBeNull();
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     // Render a partially update, but don't finish.
     ReactTestUtils.act(() => {
       triggerLowPriorityUpdate();
       expect(Scheduler).toFlushAndYieldThrough(['LowPriorityUpdater 1']);
-      expect(allSchedulerTypes).toHaveLength(1);
+      expect(allSchedulerTypes).toEqual([[null]]);
 
       // Interrupt with higher priority work.
       ReactDOM.flushSync(triggerSyncPriorityUpdate);
@@ -497,9 +488,7 @@ describe('updaters', () => {
         'Yield HighPriority 1',
         'onCommitRoot',
       ]);
-      expect(allSchedulerTypes).toHaveLength(2);
-      expect(allSchedulerTypes[1]).toHaveLength(1);
-      expect(allSchedulerTypes[1]).toContain(HighPriorityUpdater);
+      expect(allSchedulerTypes).toEqual([[null], [HighPriorityUpdater]]);
 
       // Finish the initial partial update
       triggerLowPriorityUpdate();
@@ -509,9 +498,11 @@ describe('updaters', () => {
         'onCommitRoot',
       ]);
     });
-    expect(allSchedulerTypes).toHaveLength(3);
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(LowPriorityUpdater);
+    expect(allSchedulerTypes).toEqual([
+      [null],
+      [HighPriorityUpdater],
+      [LowPriorityUpdater],
+    ]);
 
     // Verify no outstanding flushes
     Scheduler.unstable_flushAll();
@@ -570,14 +561,12 @@ describe('updaters', () => {
       'Yield:7',
       'onCommitRoot',
     ]);
-    expect(allSchedulerTags).toHaveLength(1);
-    expect(allSchedulerTags[0]).toHaveLength(1);
-    expect(allSchedulerTags[0]).toContain(HostRoot);
+    expect(allSchedulerTags).toEqual([[HostRoot]]);
 
     // Render a partial update, but don't finish.
     first.setState({renderTime: 10});
     expect(Scheduler).toFlushAndYieldThrough(['FirstComponent:10']);
-    expect(allSchedulerTypes).toHaveLength(1);
+    expect(allSchedulerTypes).toEqual([[null]]);
 
     // Interrupt with higher priority work.
     ReactDOM.flushSync(() => second.setState({renderTime: 30}));
@@ -586,9 +575,7 @@ describe('updaters', () => {
       'Yield:7',
       'onCommitRoot',
     ]);
-    expect(allSchedulerTypes).toHaveLength(2);
-    expect(allSchedulerTypes[1]).toHaveLength(1);
-    expect(allSchedulerTypes[1]).toContain(SecondComponent);
+    expect(allSchedulerTypes).toEqual([[null], [SecondComponent]]);
 
     // Resume the original low priority update.
     expect(Scheduler).toFlushAndYield([
@@ -596,8 +583,10 @@ describe('updaters', () => {
       'Yield:4',
       'onCommitRoot',
     ]);
-    expect(allSchedulerTypes).toHaveLength(3);
-    expect(allSchedulerTypes[2]).toHaveLength(1);
-    expect(allSchedulerTypes[2]).toContain(FirstComponent);
+    expect(allSchedulerTypes).toEqual([
+      [null],
+      [SecondComponent],
+      [FirstComponent],
+    ]);
   });
 });
