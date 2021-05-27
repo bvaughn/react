@@ -36,6 +36,7 @@ import {
   UIManager,
   legacySendAccessibilityEvent,
 } from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
+import {getInspectorDataForInstance} from './ReactNativeFiberInspector';
 
 import {getClosestInstanceFromNode} from './ReactNativeComponentTree';
 import {
@@ -265,6 +266,8 @@ export {
   createPortal,
   batchedUpdates as unstable_batchedUpdates,
   Internals as __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
+  // This export is undefined in production builds.
+  getInspectorDataForInstance,
 };
 
 injectIntoDevTools({
